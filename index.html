@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>配信スケジュールメーカー</title>
+<meta name="description" content="曜日ごとの配信予定を入れるだけで、Xに貼りやすい週間スケジュール画像が作れる無料ツール。">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Dela+Gothic+One&family=M+PLUS+Rounded+1c:wght@500;800&family=Zen+Kaku+Gothic+New:wght@400;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#eef1f6; --panel:#ffffff; --text:#1c2230; --muted:#5d6678;
+  --line:#d9dee8; --field:#f7f8fb; --ui:#3b5bdb; --ui-text:#ffffff;
+  color-scheme: light;
+}
+@media (prefers-color-scheme: dark){
+  :root{
+    --bg:#141823; --panel:#1e2330; --text:#e8ebf2; --muted:#9aa3b5;
+    --line:#323a4c; --field:#171b26; --ui:#7b93ff; --ui-text:#10131b;
+    color-scheme: dark;
+  }
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:var(--bg); color:var(--text);
+  font-family:"Zen Kaku Gothic New","Hiragino Sans","Yu Gothic",sans-serif;
+  line-height:1.6;
+}
+.wrap{max-width:1180px;margin:0 auto;padding:28px 20px 56px}
+header h1{
+  font-family:"Dela Gothic One","Zen Kaku Gothic New",sans-serif;
+  font-weight:400;font-size:clamp(26px,4vw,38px);line-height:1.2;margin:0 0 6px;
+}
+header p{margin:0 0 24px;color:var(--muted)}
+.grid{display:grid;grid-template-columns:minmax(0,1.35fr) minmax(0,1fr);gap:24px;align-items:start}
+.preview{position:sticky;top:20px}
+.preview canvas{width:100%;height:auto;display:block;border-radius:10px;box-shadow:0 6px 24px rgba(20,30,60,.18)}
+.preview .hint{font-size:14px;color:var(--muted);margin:10px 2px 0}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px}
+.panel + .panel{margin-top:16px}
+.panel h2{font-size:17px;margin:0 0 14px}
+label.field{display:block;margin-bottom:12px;font-size:14px;color:var(--muted)}
+label.field span{display:block;margin-bottom:4px}
+input[type=text],input[type=date]{
+  width:100%;padding:9px 11px;font:inherit;font-size:16px;color:var(--text);
+  background:var(--field);border:1px solid var(--line);border-radius:8px;
+}
+input:focus-visible,button:focus-visible,.seg input:focus-visible + span{outline:3px solid var(--ui);outline-offset:2px}
+.seg{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:14px}
+.seg label{flex:1;min-width:88px}
+.seg input{position:absolute;opacity:0;pointer-events:none}
+.seg span{
+  display:block;text-align:center;padding:9px 6px;border:1px solid var(--line);
+  border-radius:8px;cursor:pointer;font-weight:700;background:var(--field);
+}
+.seg input:checked + span{background:var(--ui);color:var(--ui-text);border-color:var(--ui)}
+.swatches{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.swatches button{
+  width:34px;height:34px;border-radius:50%;border:3px solid var(--panel);
+  box-shadow:0 0 0 1px var(--line);cursor:pointer;padding:0;
+}
+.swatches button[aria-pressed=true]{box-shadow:0 0 0 3px var(--text)}
+.swatches input[type=color]{width:42px;height:34px;border:none;background:none;padding:0;cursor:pointer}
+.day-row{display:grid;grid-template-columns:70px 108px 1fr;gap:8px;align-items:center;margin-bottom:8px}
+.day-row .toggle{display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:700}
+.day-row .toggle small{font-weight:400;color:var(--muted);font-size:12px}
+.day-row input[type=checkbox]{width:18px;height:18px;accent-color:var(--ui)}
+.day-row.off input[type=text]{opacity:.45}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+.btn{
+  font:inherit;font-weight:700;font-size:16px;border-radius:10px;padding:12px 18px;cursor:pointer;
+  border:1px solid var(--ui);background:var(--ui);color:var(--ui-text);flex:1;
+}
+.btn.sub{background:transparent;color:var(--text);border-color:var(--line);flex:0 0 auto}
+.status{min-height:1.6em;font-size:14px;color:var(--muted);margin-top:8px}
+footer{margin-top:36px;font-size:13px;color:var(--muted)}
+@media (max-width:860px){
+  .grid{grid-template-columns:1fr}
+  .preview{position:static}
+}
+@media (max-width:420px){
+  .day-row{grid-template-columns:62px 92px 1fr}
+}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>配信スケジュールメーカー</h1>
+    <p>曜日ごとの予定を入れるだけで、Xに貼れる週間スケジュール画像ができます。</p>
+  </header>
+
+  <div class="grid">
+    <section class="preview" aria-label="プレビュー">
+      <canvas id="cv" width="1600" height="900" role="img" aria-label="スケジュール画像のプレビュー"></canvas>
+      <p class="hint">Xに貼りやすい16:9(1600×900)で保存されます。入力内容はこのブラウザに自動で残ります。</p>
+    </section>
+
+    <div>
+      <section class="panel">
+        <h2>基本の情報</h2>
+        <label class="field"><span>名前</span><input type="text" id="name" maxlength="24"></label>
+        <label class="field"><span>週のはじまり(月曜日)</span><input type="date" id="start"></label>
+        <label class="field"><span>ひとこと(タグやお知らせ)</span><input type="text" id="note" maxlength="40" placeholder="例:#配信タグ で感想まってます"></label>
+      </section>
+
+      <section class="panel">
+        <h2>デザイン</h2>
+        <div class="seg" role="radiogroup" aria-label="デザイン">
+          <label><input type="radio" name="theme" value="pop"><span>ポップ</span></label>
+          <label><input type="radio" name="theme" value="sticker"><span>ステッカー</span></label>
+          <label><input type="radio" name="theme" value="simple"><span>シンプル</span></label>
+        </div>
+        <div class="swatches" id="swatches" aria-label="テーマカラー"></div>
+      </section>
+
+      <section class="panel">
+        <h2>曜日ごとの予定</h2>
+        <div id="days"></div>
+        <div class="actions">
+          <button class="btn" id="save" type="button">画像を保存</button>
+          <button class="btn sub" id="reset" type="button">入力をリセット</button>
+        </div>
+        <p class="status" id="status" aria-live="polite"></p>
+      </section>
+    </div>
+  </div>
+
+  <footer>
+    <!-- ここに後でBOOTHのデザインテンプレへのリンクを置く -->
+    <p>このツールは無料で使えます。作った画像は自由に使ってOKです。</p>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const DAYS = ['月','火','水','木','金','土','日'];
+  const PRESETS = ['#ff5c8a','#ff8a3d','#f5c518','#2bb673','#3b82f6','#8b5cf6'];
+  const W = 1600, H = 900, KEY = 'schedule-maker-v1';
+  const INK = '#22223a';
+  const SAMPLE = [
+    [true,'21:00〜','雑談'],[true,'21:00〜','ランクマッチ'],[false,'',''],
+    [true,'22:00〜','みんなで参加型'],[true,'21:00〜','新作ゲームを遊ぶ'],
+    [true,'20:00〜','耐久配信'],[false,'','']
+  ];
+
+  const pad = n => String(n).padStart(2,'0');
+  const ymd = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+  function defaultMonday(){
+    const d = new Date(); d.setHours(0,0,0,0);
+    const day = d.getDay();
+    if (day === 0) d.setDate(d.getDate()+1);
+    else if (day === 6) d.setDate(d.getDate()+2);
+    else d.setDate(d.getDate()-(day-1));
+    return ymd(d);
+  }
+  function defaultState(){
+    return {
+      name:'配信者の名前', start:defaultMonday(), note:'', theme:'pop', color:PRESETS[0],
+      days: SAMPLE.map(([on,time,text]) => ({on,time,text}))
+    };
+  }
+  function load(){
+    try{
+      const s = JSON.parse(localStorage.getItem(KEY));
+      if (s && Array.isArray(s.days) && s.days.length === 7) return s;
+    }catch(e){}
+    return null;
+  }
+  function save(){ try{ localStorage.setItem(KEY, JSON.stringify(state)); }catch(e){} }
+
+  let state = load() || defaultState();
+
+  // ---------- form ----------
+  const $ = id => document.getElementById(id);
+  const daysEl = $('days');
+
+  function weekDates(){
+    let start;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(state.start||'')){
+      const [y,m,d] = state.start.split('-').map(Number);
+      start = new Date(y,m-1,d);
+    } else {
+      const [y,m,d] = defaultMonday().split('-').map(Number);
+      start = new Date(y,m-1,d);
+    }
+    return DAYS.map((_,i) => { const d = new Date(start); d.setDate(start.getDate()+i); return d; });
+  }
+
+  function buildForm(){
+    $('name').value = state.name;
+    $('start').value = state.start;
+    $('note').value = state.note;
+    document.querySelectorAll('input[name=theme]').forEach(r => r.checked = r.value === state.theme);
+    buildSwatches();
+    daysEl.innerHTML = '';
+    const dates = weekDates();
+    state.days.forEach((d,i) => {
+      const row = document.createElement('div');
+      row.className = 'day-row' + (d.on ? '' : ' off');
+      row.innerHTML = `
+        <label class="toggle"><input type="checkbox" ${d.on?'checked':''} aria-label="${DAYS[i]}曜日に配信する">
+          <span>${DAYS[i]} <small>${dates[i].getMonth()+1}/${dates[i].getDate()}</small></span></label>
+        <input type="text" class="time" maxlength="12" placeholder="21:00〜" aria-label="${DAYS[i]}曜日の時間">
+        <input type="text" class="what" maxlength="30" placeholder="配信内容" aria-label="${DAYS[i]}曜日の配信内容">`;
+      const [cb, time, what] = row.querySelectorAll('input');
+      time.value = d.time; what.value = d.text;
+      cb.addEventListener('change', () => { d.on = cb.checked; row.classList.toggle('off', !d.on); update(); });
+      time.addEventListener('input', () => { d.time = time.value; update(); });
+      what.addEventListener('input', () => { d.text = what.value; update(); });
+      daysEl.appendChild(row);
+    });
+  }
+
+  function buildSwatches(){
+    const box = $('swatches'); box.innerHTML = '';
+    PRESETS.forEach(c => {
+      const b = document.createElement('button');
+      b.type = 'button'; b.style.background = c;
+      b.setAttribute('aria-label', `色 ${c}`);
+      b.setAttribute('aria-pressed', String(c.toLowerCase() === state.color.toLowerCase()));
+      b.addEventListener('click', () => { state.color = c; buildSwatches(); update(); });
+      box.appendChild(b);
+    });
+    const pick = document.createElement('input');
+    pick.type = 'color'; pick.value = state.color; pick.setAttribute('aria-label','好きな色を選ぶ');
+    pick.addEventListener('input', () => {
+      state.color = pick.value;
+      box.querySelectorAll('button').forEach(b => b.setAttribute('aria-pressed','false'));
+      update();
+    });
+    box.appendChild(pick);
+  }
+
+  $('name').addEventListener('input', e => { state.name = e.target.value; update(); });
+  $('note').addEventListener('input', e => { state.note = e.target.value; update(); });
+  $('start').addEventListener('change', e => { state.start = e.target.value; buildForm(); update(); });
+  document.querySelectorAll('input[name=theme]').forEach(r =>
+    r.addEventListener('change', () => { state.theme = r.value; update(); }));
+
+  $('reset').addEventListener('click', () => {
+    state = defaultState(); buildForm(); update();
+    $('status').textContent = '入力をリセットしました。';
+  });
+
+  $('save').addEventListener('click', async () => {
+    await render();
+    cv.toBlob(blob => {
+      if (!blob){ $('status').textContent = '画像を作れませんでした。ページを再読み込みしてもう一度試してください。'; return; }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `schedule_${(state.start||'').replace(/-/g,'')}.png`;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 2000);
+      $('status').textContent = '画像のダウンロードを始めました。';
+    }, 'image/png');
+  });
+
+  function update(){ save(); render(); }
+
+  // ---------- drawing helpers ----------
+  const cv = $('cv'), ctx = cv.getContext('2d');
+  const F = (w,s,f) => `${w} ${s}px "${f}", sans-serif`;
+
+  function rr(c,x,y,w,h,r){
+    c.beginPath(); c.moveTo(x+r,y); c.arcTo(x+w,y,x+w,y+h,r); c.arcTo(x+w,y+h,x,y+h,r);
+    c.arcTo(x,y+h,x,y,r); c.arcTo(x,y,x+w,y,r); c.closePath();
+  }
+  function fit(c,text,maxW,wt,size,fam,min){
+    while (size > min){ c.font = F(wt,size,fam); if (c.measureText(text).width <= maxW) break; size -= 2; }
+    c.font = F(wt,size,fam); return size;
+  }
+  function wrap(c,text,maxW,maxLines){
+    const chars = [...String(text||'')]; const lines = []; let cur = '';
+    for (const ch of chars){
+      if (cur && c.measureText(cur+ch).width > maxW){
+        lines.push(cur); cur = ch;
+        if (lines.length === maxLines){
+          let last = lines[maxLines-1];
+          while (last && c.measureText(last+'…').width > maxW) last = [...last].slice(0,-1).join('');
+          lines[maxLines-1] = last + '…';
+          return lines;
+        }
+      } else cur += ch;
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+  function lines(c,arr,x,cy,lh){ const n = arr.length; arr.forEach((l,i) => c.fillText(l, x, cy+(i-(n-1)/2)*lh)); }
+  function hexRgb(h){ const n = parseInt(h.slice(1),16); return [n>>16&255, n>>8&255, n&255]; }
+  function mix(a,b,t){ const A = hexRgb(a), B = hexRgb(b); return `rgb(${A.map((v,i)=>Math.round(v+(B[i]-v)*t)).join(',')})`; }
+  function lum(h){
+    return hexRgb(h).map(v => { v/=255; return v <= .03928 ? v/12.92 : Math.pow((v+.055)/1.055,2.4); })
+      .reduce((s,v,i) => s + v*[.2126,.7152,.0722][i], 0);
+  }
+  const md = d => `${d.getMonth()+1}/${d.getDate()}`;
+
+  // ---------- templates ----------
+  function drawPop(c,s,dates,range){
+    const a = s.color, on = lum(a) > .55 ? INK : '#ffffff';
+    c.fillStyle = a; c.fillRect(0,0,W,H);
+    c.save(); c.globalAlpha = .10; c.strokeStyle = '#fff'; c.lineWidth = 18;
+    for (let x = -H; x < W; x += 70){ c.beginPath(); c.moveTo(x,H); c.lineTo(x+H,0); c.stroke(); }
+    c.restore();
+
+    c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.fillStyle = on;
+    c.font = F(400,64,'Dela Gothic One'); c.fillText('今週の',70,170);
+    fit(c,'配信予定',390,400,104,'Dela Gothic One',60); c.fillText('配信予定',70,292);
+    c.font = F(700,34,'Zen Kaku Gothic New'); c.fillText(range,74,352);
+    if (s.name){ fit(c,s.name,390,400,50,'Dela Gothic One',24); c.fillText(s.name,70,782); }
+    if (s.note){ c.font = F(700,26,'Zen Kaku Gothic New'); c.fillText(wrap(c,s.note,390,1)[0]||'',72,832); }
+
+    const x0 = 520, w = 1010, top = 58, rh = 112, ch = 100;
+    c.textBaseline = 'middle';
+    s.days.forEach((d,i) => {
+      const y = top + i*rh, cy = y + ch/2;
+      c.save(); c.globalAlpha = d.on ? 1 : .4; c.fillStyle = '#fff'; rr(c,x0,y,w,ch,24); c.fill(); c.restore();
+      c.fillStyle = d.on ? a : 'rgba(255,255,255,.9)';
+      c.beginPath(); c.arc(x0+58,cy,36,0,Math.PI*2); c.fill();
+      c.textAlign = 'center'; c.fillStyle = d.on ? on : INK;
+      c.font = F(400,36,'Dela Gothic One'); c.fillText(DAYS[i],x0+58,cy+2);
+      c.textAlign = 'left';
+      c.save(); if (!d.on) c.globalAlpha = .65;
+      c.fillStyle = d.on ? '#6b6b80' : INK; c.font = F(700,22,'Zen Kaku Gothic New');
+      c.fillText(md(dates[i]), x0+116, d.on ? cy-18 : cy);
+      if (d.on){
+        c.fillStyle = INK; fit(c,d.time||'',190,700,30,'Zen Kaku Gothic New',18);
+        c.fillText(d.time||'', x0+116, cy+18);
+        c.font = F(700,34,'Zen Kaku Gothic New');
+        lines(c, wrap(c,d.text,650,2), x0+330, cy, 42);
+      } else {
+        c.font = F(400,34,'Dela Gothic One'); c.fillText('おやすみ', x0+330, cy+2);
+      }
+      c.restore();
+    });
+  }
+
+  function drawSticker(c,s,dates,range){
+    const a = s.color, R = 'M PLUS Rounded 1c';
+    c.fillStyle = mix(a,'#ffffff',.84); c.fillRect(0,0,W,H);
+    c.fillStyle = mix(a,'#ffffff',.6);
+    for (let y = 20; y < H; y += 40) for (let x = (y/40)%2 ? 40 : 20; x < W; x += 40){ c.beginPath(); c.arc(x,y,3,0,Math.PI*2); c.fill(); }
+
+    // title card
+    c.save(); c.translate(260,220); c.rotate(-3*Math.PI/180);
+    c.fillStyle = INK; rr(c,-190+10,-140+10,380,280,26); c.fill();
+    c.fillStyle = '#fff'; rr(c,-190,-140,380,280,26); c.fill();
+    c.lineWidth = 6; c.strokeStyle = INK; c.stroke();
+    c.textAlign = 'center'; c.textBaseline = 'alphabetic';
+    c.fillStyle = INK; c.font = F(800,52,R); c.fillText('今週の',0,-40);
+    c.fillStyle = a; c.globalAlpha = .5; c.fillRect(-150,40,300,34); c.globalAlpha = 1;
+    c.fillStyle = INK; fit(c,'配信予定',320,800,80,R,50); c.fillText('配信予定',0,70);
+    c.restore();
+
+    c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.fillStyle = INK;
+    c.font = F(800,32,R); c.fillText(range,76,440);
+    if (s.name){ fit(c,s.name,400,800,48,R,24); c.fillText(s.name,70,786); }
+    if (s.note){ c.font = F(500,26,R); c.fillText(wrap(c,s.note,400,1)[0]||'',72,834); }
+
+    const x0 = 520, w = 1010, top = 66, rh = 112, ch = 94;
+    c.textBaseline = 'middle';
+    s.days.forEach((d,i) => {
+      const y = top + i*rh - 6, cy = y + ch/2;
+      c.save(); c.translate(x0+w/2, cy); c.rotate((i%2 ? .5 : -.5)*Math.PI/180); c.translate(-(x0+w/2), -cy);
+      c.fillStyle = INK; rr(c,x0+8,y+8,w,ch,20); c.fill();
+      c.fillStyle = d.on ? '#fff' : mix(a,'#ffffff',.92); rr(c,x0,y,w,ch,20); c.fill();
+      c.lineWidth = 5; c.strokeStyle = INK; c.stroke();
+      c.fillStyle = d.on ? a : '#fff'; rr(c,x0+16,y+13,68,68,16); c.fill(); c.lineWidth = 4; c.stroke();
+      c.textAlign = 'center'; c.fillStyle = INK; c.font = F(800,38,R); c.fillText(DAYS[i],x0+50,cy+1);
+      c.textAlign = 'left';
+      c.globalAlpha = .7; c.font = F(800,22,R); c.fillText(md(dates[i]), x0+106, d.on ? cy-18 : cy); c.globalAlpha = 1;
+      if (d.on){
+        fit(c,d.time||'',180,800,30,R,18); c.fillText(d.time||'', x0+106, cy+18);
+        c.font = F(800,32,R); lines(c, wrap(c,d.text,660,2), x0+310, cy, 40);
+      } else {
+        c.globalAlpha = .45; c.font = F(800,32,R); c.fillText('おやすみ', x0+310, cy); c.globalAlpha = 1;
+      }
+      c.restore();
+    });
+  }
+
+  function drawSimple(c,s,dates,range){
+    const a = s.color, Z = 'Zen Kaku Gothic New', deep = mix(a,'#000000',.25);
+    c.fillStyle = '#ffffff'; c.fillRect(0,0,W,H);
+    c.fillStyle = a; c.fillRect(0,0,16,H);
+
+    c.textAlign = 'left'; c.textBaseline = 'alphabetic'; c.fillStyle = '#1c2230';
+    c.font = F(700,40,Z); c.fillText('今週の',90,160);
+    fit(c,'配信予定',380,700,84,Z,50); c.fillText('配信予定',90,250);
+    c.fillStyle = '#6b7280'; c.font = F(400,30,Z); c.fillText(range,92,306);
+    c.fillStyle = a; c.fillRect(92,336,80,6);
+    c.fillStyle = '#1c2230';
+    if (s.name){ fit(c,s.name,380,700,44,Z,24); c.fillText(s.name,90,790); }
+    if (s.note){ c.fillStyle = '#6b7280'; c.font = F(400,26,Z); c.fillText(wrap(c,s.note,380,1)[0]||'',92,836); }
+
+    const x0 = 540, w = 990, top = 60, rh = 111;
+    c.textBaseline = 'middle';
+    s.days.forEach((d,i) => {
+      const y = top + i*rh, cy = y + rh/2;
+      if (i > 0){ c.fillStyle = '#e5e7eb'; c.fillRect(x0,y,w,2); }
+      c.fillStyle = i === 5 ? '#2f6fde' : i === 6 ? '#e0464e' : '#1c2230';
+      c.font = F(700,44,Z); c.fillText(DAYS[i], x0+10, cy);
+      c.fillStyle = '#6b7280'; c.font = F(400,22,Z); c.fillText(md(dates[i]), x0+70, cy+2);
+      if (d.on){
+        c.fillStyle = deep; fit(c,d.time||'',180,700,30,Z,18); c.fillText(d.time||'', x0+170, cy);
+        c.fillStyle = '#1c2230'; c.font = F(700,32,Z); lines(c, wrap(c,d.text,600,2), x0+370, cy, 40);
+      } else {
+        c.fillStyle = '#9ca3af'; c.font = F(400,30,Z); c.fillText('—', x0+170, cy); c.fillText('おやすみ', x0+370, cy);
+      }
+    });
+  }
+
+  const TEMPLATES = {
+    pop:     { draw: drawPop,     fonts: ['400 40px "Dela Gothic One"','700 40px "Zen Kaku Gothic New"'] },
+    sticker: { draw: drawSticker, fonts: ['800 40px "M PLUS Rounded 1c"','500 40px "M PLUS Rounded 1c"'] },
+    simple:  { draw: drawSimple,  fonts: ['700 40px "Zen Kaku Gothic New"','400 40px "Zen Kaku Gothic New"'] }
+  };
+
+  let renderId = 0;
+  async function render(){
+    const id = ++renderId;
+    const t = TEMPLATES[state.theme] || TEMPLATES.pop;
+    const dates = weekDates();
+    const range = `${md(dates[0])} 〜 ${md(dates[6])}`;
+    const text = ['今週の配信予定おやすみ—…', DAYS.join(''), range, '0123456789:/〜',
+      state.name, state.note, ...state.days.map(d => d.time + d.text)].join('');
+    try { await Promise.all(t.fonts.map(f => document.fonts.load(f, text))); } catch(e){}
+    if (id !== renderId) return;
+    ctx.clearRect(0,0,W,H);
+    t.draw(ctx, state, dates, range);
+  }
+
+  buildForm();
+  render();
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(render);
+})();
+</script>
+</body>
+</html>
